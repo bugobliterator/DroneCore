@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.12)
 
 project(takeoff_and_land)
 
-add_definitions("-std=c++11 -Wall -Wextra -Werror")
+add_definitions("-std=c++11 -g -Wall -Wextra -Werror")
 
 # Add DEBUG define for Debug target
 set(CMAKE_CXX_FLAGS_DEBUG "-DDEBUG")

@@ -2,6 +2,8 @@
 #include "global_include.h"
 #include <mutex>
 #include "device_px4.h"
+#include "device_apm.h"
+
 namespace dronecore {
 
 DroneCoreImpl::DroneCoreImpl() :
@@ -215,19 +217,29 @@ void DroneCoreImpl::create_device_if_not_existing(uint8_t system_id, uint8_t dev
     case MAV_AUTOPILOT_PX4: {
         DeviceImpl *px4_device_impl = new PX4DeviceImpl(this, system_id);
         _device_impls.insert(std::pair<uint8_t, DeviceImpl *>(system_id, px4_device_impl));
+
+        Device *px4_device = new Device(px4_device_impl);
+        _devices.insert(std::pair<uint8_t, Device *>(system_id, px4_device));
         break; 
     }
     case MAV_AUTOPILOT_ARDUPILOTMEGA: {
-        std::cout << "APM Detected!!";
-        exit(0);
+        DeviceImpl *apm_device_impl = new APMDeviceImpl(this, system_id);
+        _device_impls.insert(std::pair<uint8_t, DeviceImpl *>(system_id, apm_device_impl));
+
+        Device *apm_device = new Device(apm_device_impl);
+        _devices.insert(std::pair<uint8_t, Device *>(system_id, apm_device));
         break;
     }
     default : {
-        DeviceImpl *default_device_impl = new DeviceImpl();
+        DeviceImpl *default_device_impl = new PX4DeviceImpl(this, system_id);
         _device_impls.insert(std::pair<uint8_t, DeviceImpl *>(system_id, default_device_impl));
+
+        Device *default_device = new Device(default_device_impl);
+        _devices.insert(std::pair<uint8_t, Device *>(system_id, default_device));
         break;
     }
     };
+
 }
 
 void DroneCoreImpl::notify_on_discover(uint64_t uuid)

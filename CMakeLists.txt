@@ -71,6 +71,7 @@ add_library(dronecore STATIC
     core/connection.cpp
     core/device.cpp
     core/device_px4.cpp
+    core/device_apm.cpp
     core/mavlink_parameters.cpp
     core/mavlink_commands.cpp
     core/dronecore.cpp

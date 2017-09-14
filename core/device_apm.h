@@ -1,4 +1,4 @@
-#pragma once
+  #pragma once
 
 #include "global_include.h"
 #include "mavlink_include.h"
@@ -18,12 +18,12 @@ namespace dronecore {
 class DroneCoreImpl;
 
 
-class PX4DeviceImpl : public DeviceImpl
+class APMDeviceImpl : public DeviceImpl
 {
 public:
-    explicit PX4DeviceImpl(DroneCoreImpl *parent,
+    explicit APMDeviceImpl(DroneCoreImpl *parent,
                         uint8_t target_system_id);
-    ~PX4DeviceImpl();
+    ~APMDeviceImpl();
 
     void process_mavlink_message(const mavlink_message_t &message) override;
 
@@ -46,14 +46,23 @@ public:
 
     bool send_message(const mavlink_message_t &message) override;
 
+    MavlinkCommands::Result set_mode_with_ack(uint32_t base_mode,
+                                              uint8_t custom_mode,
+                                              uint8_t component_id) override;
+
     MavlinkCommands::Result send_command_with_ack(uint16_t command,
                                                   const MavlinkCommands::Params &params,
                                                   uint8_t component_id = 0) override;
+
 
     typedef std::function<void(MavlinkCommands::Result, float)> command_result_callback_t;
     void send_command_with_ack_async(uint16_t command, const MavlinkCommands::Params &params,
                                      command_result_callback_t callback,
                                      uint8_t component_id = 0) override;
+
+    void set_mode_with_ack_async(uint32_t base_mode, uint8_t custom_mode,
+                                 command_result_callback_t callback,
+                                 uint8_t component_id) override;
 
     MavlinkCommands::Result set_msg_rate(uint16_t message_id, double rate_hz) override;
 
@@ -81,19 +90,20 @@ public:
     void get_param_int_async(const std::string &name, get_param_int_callback_t callback) override;
     void get_param_ext_float_async(const std::string &name, get_param_float_callback_t callback) override;
     void get_param_ext_int_async(const std::string &name, get_param_int_callback_t callback) override;
-
+    
     // Non-copyable
-    PX4DeviceImpl(const PX4DeviceImpl &) = delete;
-    const PX4DeviceImpl &operator=(const PX4DeviceImpl &) = delete;
+    APMDeviceImpl(const APMDeviceImpl &) = delete;
+    const APMDeviceImpl &operator=(const APMDeviceImpl &) = delete;
+
 private:
 
     void process_heartbeat(const mavlink_message_t &message);
     void process_autopilot_version(const mavlink_message_t &message);
 
-    static void device_thread(PX4DeviceImpl *self);
-    static void send_heartbeat(PX4DeviceImpl *self);
-    static void check_timeouts(PX4DeviceImpl *self);
-    static void check_heartbeat_timeout(PX4DeviceImpl *self);
+    static void device_thread(APMDeviceImpl *self);
+    static void send_heartbeat(APMDeviceImpl *self);
+    static void check_timeouts(APMDeviceImpl *self);
+    static void check_heartbeat_timeout(APMDeviceImpl *self);
 
     static void receive_float_param(bool success, MavlinkParameters::ParamValue value,
                                     get_param_float_callback_t callback);

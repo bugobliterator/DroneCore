@@ -1,4 +1,4 @@
-#include "device_px4.h"
+#include "device_apm.h"
 #include "global_include.h"
 #include "dronecore_impl.h"
 #include "mavlink_include.h"
@@ -7,29 +7,30 @@
 namespace dronecore {
 
 using namespace std::placeholders; // for `_1`
-std::mutex PX4DeviceImpl::_last_heartbeat_reiceved_time_mutex;
-dl_time_t PX4DeviceImpl::_last_heartbeat_received_time;
+std::mutex APMDeviceImpl::_last_heartbeat_reiceved_time_mutex;
+dl_time_t APMDeviceImpl::_last_heartbeat_received_time;
 
-PX4DeviceImpl::PX4DeviceImpl(DroneCoreImpl *parent,
+APMDeviceImpl::APMDeviceImpl(DroneCoreImpl *parent,
                        uint8_t target_system_id) :
     _target_system_id(target_system_id),
     _parent(parent),
     _params((DeviceImpl*)this),
     _commands((DeviceImpl*)this)
 {
-    _device_type = MAV_AUTOPILOT_PX4;
+    _device_type = MAV_AUTOPILOT_ARDUPILOTMEGA;
+
     _device_thread = new std::thread(device_thread, this);
 
     register_mavlink_message_handler(
         MAVLINK_MSG_ID_HEARTBEAT,
-        std::bind(&PX4DeviceImpl::process_heartbeat, this, _1), this);
+        std::bind(&APMDeviceImpl::process_heartbeat, this, _1), this);
 
     register_mavlink_message_handler(
         MAVLINK_MSG_ID_AUTOPILOT_VERSION,
-        std::bind(&PX4DeviceImpl::process_autopilot_version, this, _1), this);
+        std::bind(&APMDeviceImpl::process_autopilot_version, this, _1), this);
 }
 
-PX4DeviceImpl::~PX4DeviceImpl()
+APMDeviceImpl::~APMDeviceImpl()
 {
     _should_exit = true;
     unregister_all_mavlink_message_handlers(this);
@@ -41,7 +42,7 @@ PX4DeviceImpl::~PX4DeviceImpl()
     }
 }
 
-void PX4DeviceImpl::register_mavlink_message_handler(uint16_t msg_id,
+void APMDeviceImpl::register_mavlink_message_handler(uint16_t msg_id,
                                                   mavlink_message_handler_t callback,
                                                   const void *cookie)
 {
@@ -51,7 +52,7 @@ void PX4DeviceImpl::register_mavlink_message_handler(uint16_t msg_id,
     _mavlink_handler_table.push_back(entry);
 }
 
-void PX4DeviceImpl::unregister_all_mavlink_message_handlers(const void *cookie)
+void APMDeviceImpl::unregister_all_mavlink_message_handlers(const void *cookie)
 {
     std::lock_guard<std::mutex> lock(_mavlink_handler_table_mutex);
 
@@ -68,7 +69,7 @@ void PX4DeviceImpl::unregister_all_mavlink_message_handlers(const void *cookie)
     _mavlink_handler_table.clear();
 }
 
-void PX4DeviceImpl::register_timeout_handler(timeout_handler_t callback,
+void APMDeviceImpl::register_timeout_handler(timeout_handler_t callback,
                                           double duration_s,
                                           const void *cookie)
 {
@@ -80,7 +81,7 @@ void PX4DeviceImpl::register_timeout_handler(timeout_handler_t callback,
     _timeout_handler_map.insert({cookie, entry});
 }
 
-void PX4DeviceImpl::refresh_timeout_handler(const void *cookie)
+void APMDeviceImpl::refresh_timeout_handler(const void *cookie)
 {
     std::lock_guard<std::mutex> lock(_timeout_handler_map_mutex);
 
@@ -91,7 +92,7 @@ void PX4DeviceImpl::refresh_timeout_handler(const void *cookie)
     }
 }
 
-void PX4DeviceImpl::unregister_timeout_handler(const void *cookie)
+void APMDeviceImpl::unregister_timeout_handler(const void *cookie)
 {
     std::lock_guard<std::mutex> lock(_timeout_handler_map_mutex);
 
@@ -101,7 +102,7 @@ void PX4DeviceImpl::unregister_timeout_handler(const void *cookie)
     }
 }
 
-void PX4DeviceImpl::process_mavlink_message(const mavlink_message_t &message)
+void APMDeviceImpl::process_mavlink_message(const mavlink_message_t &message)
 {
     std::lock_guard<std::mutex> lock(_mavlink_handler_table_mutex);
 
@@ -112,7 +113,7 @@ void PX4DeviceImpl::process_mavlink_message(const mavlink_message_t &message)
     }
 }
 
-void PX4DeviceImpl::process_heartbeat(const mavlink_message_t &message)
+void APMDeviceImpl::process_heartbeat(const mavlink_message_t &message)
 {
     mavlink_heartbeat_t heartbeat;
     mavlink_msg_heartbeat_decode(&message, &heartbeat);
@@ -131,7 +132,7 @@ void PX4DeviceImpl::process_heartbeat(const mavlink_message_t &message)
     _last_heartbeat_received_time = steady_time();
 }
 
-void PX4DeviceImpl::process_autopilot_version(const mavlink_message_t &message)
+void APMDeviceImpl::process_autopilot_version(const mavlink_message_t &message)
 {
     // Ignore if they don't come from the autopilot component
     if (message.compid != MavlinkCommands::DEFAULT_COMPONENT_ID_AUTOPILOT) {
@@ -163,13 +164,13 @@ void PX4DeviceImpl::process_autopilot_version(const mavlink_message_t &message)
     }
 }
 
-void PX4DeviceImpl::device_thread(PX4DeviceImpl *self)
+void APMDeviceImpl::device_thread(APMDeviceImpl *self)
 {
     dl_time_t last_time {};
 
     while (!self->_should_exit) {
 
-        if (elapsed_since_s(last_time) >= PX4DeviceImpl::_HEARTBEAT_SEND_INTERVAL_S) {
+        if (elapsed_since_s(last_time) >= APMDeviceImpl::_HEARTBEAT_SEND_INTERVAL_S) {
             send_heartbeat(self);
             last_time = steady_time();
         }
@@ -187,7 +188,7 @@ void PX4DeviceImpl::device_thread(PX4DeviceImpl *self)
     }
 }
 
-void PX4DeviceImpl::send_heartbeat(PX4DeviceImpl *self)
+void APMDeviceImpl::send_heartbeat(APMDeviceImpl *self)
 {
     mavlink_message_t message;
     mavlink_msg_heartbeat_pack(_own_system_id, _own_component_id, &message,
@@ -195,7 +196,7 @@ void PX4DeviceImpl::send_heartbeat(PX4DeviceImpl *self)
     self->send_message(message);
 }
 
-void PX4DeviceImpl::check_timeouts(PX4DeviceImpl *self)
+void APMDeviceImpl::check_timeouts(APMDeviceImpl *self)
 {
     timeout_handler_t callback = nullptr;
 
@@ -226,10 +227,10 @@ void PX4DeviceImpl::check_timeouts(PX4DeviceImpl *self)
     }
 }
 
-void PX4DeviceImpl::check_heartbeat_timeout(PX4DeviceImpl *self)
+void APMDeviceImpl::check_heartbeat_timeout(APMDeviceImpl *self)
 {
     std::lock_guard<std::mutex> lock(_last_heartbeat_reiceved_time_mutex);
-    if (elapsed_since_s(self->_last_heartbeat_received_time) > PX4DeviceImpl::_HEARTBEAT_TIMEOUT_S) {
+    if (elapsed_since_s(self->_last_heartbeat_received_time) > APMDeviceImpl::_HEARTBEAT_TIMEOUT_S) {
         if (self->_heartbeats_arriving) {
             self->_parent->notify_on_timeout(self->_target_uuid);
             self->_heartbeats_arriving = false;
@@ -241,12 +242,12 @@ void PX4DeviceImpl::check_heartbeat_timeout(PX4DeviceImpl *self)
     }
 }
 
-bool PX4DeviceImpl::send_message(const mavlink_message_t &message)
+bool APMDeviceImpl::send_message(const mavlink_message_t &message)
 {
     return _parent->send_message(message);
 }
 
-void PX4DeviceImpl::request_autopilot_version()
+void APMDeviceImpl::request_autopilot_version()
 {
     send_command_with_ack_async(
         MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES,
@@ -255,83 +256,83 @@ void PX4DeviceImpl::request_autopilot_version()
         MavlinkCommands::DEFAULT_COMPONENT_ID_AUTOPILOT);
 }
 
-uint64_t PX4DeviceImpl::get_target_uuid() const
+uint64_t APMDeviceImpl::get_target_uuid() const
 {
     return _target_uuid;
 }
 
-uint8_t PX4DeviceImpl::get_target_system_id() const
+uint8_t APMDeviceImpl::get_target_system_id() const
 {
     return _target_system_id;
 }
 
-uint8_t PX4DeviceImpl::get_target_component_id() const
+uint8_t APMDeviceImpl::get_target_component_id() const
 {
     return _target_component_id;
 }
 
-void PX4DeviceImpl::set_target_system_id(uint8_t system_id)
+void APMDeviceImpl::set_target_system_id(uint8_t system_id)
 {
     _target_system_id = system_id;
 }
 
-void PX4DeviceImpl::set_param_float_async(const std::string &name, float value, success_t callback)
+void APMDeviceImpl::set_param_float_async(const std::string &name, float value, success_t callback)
 {
     MavlinkParameters::ParamValue param_value;
     param_value.set_float(value);
     _params.set_param_async(name, param_value, callback);
 }
 
-void PX4DeviceImpl::set_param_int_async(const std::string &name, int32_t value, success_t callback)
+void APMDeviceImpl::set_param_int_async(const std::string &name, int32_t value, success_t callback)
 {
     MavlinkParameters::ParamValue param_value;
     param_value.set_int(value);
     _params.set_param_async(name, param_value, callback);
 }
 
-void PX4DeviceImpl::set_param_ext_float_async(const std::string &name, float value, success_t callback)
+void APMDeviceImpl::set_param_ext_float_async(const std::string &name, float value, success_t callback)
 {
     MavlinkParameters::ParamValue param_value;
     param_value.set_float(value);
     _params.set_param_async(name, param_value, callback, true);
 }
 
-void PX4DeviceImpl::set_param_ext_int_async(const std::string &name, int32_t value, success_t callback)
+void APMDeviceImpl::set_param_ext_int_async(const std::string &name, int32_t value, success_t callback)
 {
     MavlinkParameters::ParamValue param_value;
     param_value.set_int(value);
     _params.set_param_async(name, param_value, callback, true);
 }
 
-void PX4DeviceImpl::get_param_float_async(const std::string &name,
+void APMDeviceImpl::get_param_float_async(const std::string &name,
                                        get_param_float_callback_t callback)
 {
-    _params.get_param_async(name, std::bind(&PX4DeviceImpl::receive_float_param, _1, _2,
+    _params.get_param_async(name, std::bind(&APMDeviceImpl::receive_float_param, _1, _2,
                                             callback));
 }
 
-void PX4DeviceImpl::get_param_int_async(const std::string &name,
+void APMDeviceImpl::get_param_int_async(const std::string &name,
                                      get_param_int_callback_t callback)
 {
-    _params.get_param_async(name, std::bind(&PX4DeviceImpl::receive_int_param, _1, _2,
+    _params.get_param_async(name, std::bind(&APMDeviceImpl::receive_int_param, _1, _2,
                                             callback));
 }
 
-void PX4DeviceImpl::get_param_ext_float_async(const std::string &name,
+void APMDeviceImpl::get_param_ext_float_async(const std::string &name,
                                            get_param_float_callback_t callback)
 {
-    _params.get_param_async(name, std::bind(&PX4DeviceImpl::receive_float_param, _1, _2,
+    _params.get_param_async(name, std::bind(&APMDeviceImpl::receive_float_param, _1, _2,
                                             callback), true);
 }
 
-void PX4DeviceImpl::get_param_ext_int_async(const std::string &name,
+void APMDeviceImpl::get_param_ext_int_async(const std::string &name,
                                          get_param_int_callback_t callback)
 {
-    _params.get_param_async(name, std::bind(&PX4DeviceImpl::receive_int_param, _1, _2,
+    _params.get_param_async(name, std::bind(&APMDeviceImpl::receive_int_param, _1, _2,
                                             callback), true);
 }
 
-void PX4DeviceImpl::receive_float_param(bool success, MavlinkParameters::ParamValue value,
+void APMDeviceImpl::receive_float_param(bool success, MavlinkParameters::ParamValue value,
                                      get_param_float_callback_t callback)
 {
     if (callback) {
@@ -339,7 +340,7 @@ void PX4DeviceImpl::receive_float_param(bool success, MavlinkParameters::ParamVa
     }
 }
 
-void PX4DeviceImpl::receive_int_param(bool success, MavlinkParameters::ParamValue value,
+void APMDeviceImpl::receive_int_param(bool success, MavlinkParameters::ParamValue value,
                                    get_param_int_callback_t callback)
 {
     if (callback) {
@@ -347,7 +348,20 @@ void PX4DeviceImpl::receive_int_param(bool success, MavlinkParameters::ParamValu
     }
 }
 
-MavlinkCommands::Result PX4DeviceImpl::send_command_with_ack(
+MavlinkCommands::Result APMDeviceImpl::set_mode_with_ack(
+    uint32_t base_mode, uint8_t custom_mode, uint8_t component_id)
+{
+    if (_target_system_id == 0 && _target_component_id == 0) {
+        return MavlinkCommands::Result::NO_DEVICE;
+    }
+
+    const uint8_t component_id_to_use =
+        ((component_id != 0) ? component_id : _target_component_id);
+
+    return _commands.set_mode(base_mode, custom_mode, _target_system_id, component_id_to_use);
+}
+
+MavlinkCommands::Result APMDeviceImpl::send_command_with_ack(
     uint16_t command, const MavlinkCommands::Params &params, uint8_t component_id)
 {
     if (_target_system_id == 0 && _target_component_id == 0) {
@@ -360,7 +374,27 @@ MavlinkCommands::Result PX4DeviceImpl::send_command_with_ack(
     return _commands.send_command(command, params, _target_system_id, component_id_to_use);
 }
 
-void PX4DeviceImpl::send_command_with_ack_async(uint16_t command,
+
+void APMDeviceImpl::set_mode_with_ack_async( uint32_t base_mode, uint8_t custom_mode,
+                                             command_result_callback_t callback,
+                                             uint8_t component_id)
+{
+    if (_target_system_id == 0 && _target_component_id == 0) {
+        if (callback) {
+            callback(MavlinkCommands::Result::NO_DEVICE, NAN);
+        }
+        return;
+    }
+
+    const uint8_t component_id_to_use =
+        ((component_id != 0) ? component_id : _target_component_id);
+
+    _commands.queue_set_mode_async(base_mode, custom_mode, 
+                                  _target_system_id, component_id_to_use,
+                                  callback);
+}
+
+void APMDeviceImpl::send_command_with_ack_async(uint16_t command,
                                              const MavlinkCommands::Params &params,
                                              command_result_callback_t callback,
                                              uint8_t component_id)
@@ -379,20 +413,37 @@ void PX4DeviceImpl::send_command_with_ack_async(uint16_t command,
                                   callback);
 }
 
-MavlinkCommands::Result PX4DeviceImpl::set_msg_rate(uint16_t message_id, double rate_hz)
+MavlinkCommands::Result APMDeviceImpl::set_msg_rate(uint16_t stream_id, double rate_hz)
 {
     // If left at -1 it will stop the message stream.
     float interval_us = -1.0f;
     if (rate_hz > 0) {
         interval_us = 1e6f / (float)rate_hz;
     }
+    mavlink_request_data_stream_t packet;
+    mavlink_message_t message;
+    if (interval_us <= 0.0f) {
+        rate_hz = 0;
+    }
+    packet.req_message_rate = rate_hz;
+    packet.target_system = _target_system_id;
+    packet.target_component = _target_component_id;
+    packet.req_stream_id = stream_id;
+    if (rate_hz == 0){
+        packet.start_stop = 0;
+    } else {
+        packet.start_stop = 1;
+    }
 
-    return send_command_with_ack(
-               MAV_CMD_SET_MESSAGE_INTERVAL,
-               MavlinkCommands::Params {float(message_id), interval_us, NAN, NAN, NAN, NAN, NAN});
+    mavlink_msg_request_data_stream_encode(_own_system_id, _own_component_id, &message, &packet);
+    if(_parent->send_message(message)) {
+        return MavlinkCommands::Result::SUCCESS;
+    } else {
+        return MavlinkCommands::Result::CONNECTION_ERROR;
+    }
 }
 
-void PX4DeviceImpl::set_msg_rate_async(uint16_t message_id, double rate_hz,
+void APMDeviceImpl::set_msg_rate_async(uint16_t stream_id, double rate_hz,
                                     command_result_callback_t callback)
 {
     // If left at -1 it will stop the message stream.
@@ -400,11 +451,23 @@ void PX4DeviceImpl::set_msg_rate_async(uint16_t message_id, double rate_hz,
     if (rate_hz > 0) {
         interval_us = 1e6f / (float)rate_hz;
     }
-
-    send_command_with_ack_async(
-        MAV_CMD_SET_MESSAGE_INTERVAL,
-        MavlinkCommands::Params {float(message_id), interval_us, NAN, NAN, NAN, NAN, NAN},
-        callback);
+    mavlink_request_data_stream_t packet;
+    mavlink_message_t message;
+    if (interval_us <= 0.0f) {
+        rate_hz = 0;
+    }
+    (void)callback;
+    packet.req_message_rate = rate_hz;
+    packet.target_system = _target_system_id;
+    packet.target_component = _target_component_id;
+    packet.req_stream_id = stream_id;
+    if (rate_hz == 0){
+        packet.start_stop = 0;
+    } else {
+        packet.start_stop = 1;
+    }
+    mavlink_msg_request_data_stream_encode(_own_system_id, _own_component_id, &message, &packet);
+    _parent->send_message(message);
 }
 
 

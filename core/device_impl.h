@@ -46,13 +46,27 @@ public:
     virtual MavlinkCommands::Result send_command_with_ack(uint16_t ,
                                                   const MavlinkCommands::Params &,
                                                   uint8_t component_id = 0)
-    {   (void)component_id;
-        return MavlinkCommands::Result::NO_DEVICE; }
+    {   
+        (void)component_id;
+        return MavlinkCommands::Result::NO_DEVICE;
+    }
+
+    virtual MavlinkCommands::Result set_mode_with_ack(uint32_t , uint8_t ,
+                                                      uint8_t component_id = 0)
+    {
+        (void)component_id;
+        return MavlinkCommands::Result::NO_DEVICE;
+    }
 
     typedef std::function<void(MavlinkCommands::Result, float)> command_result_callback_t;
     virtual void send_command_with_ack_async(uint16_t , const MavlinkCommands::Params &,
                                      command_result_callback_t ,
                                      uint8_t component_id = 0) { (void)component_id; }
+
+
+    virtual void set_mode_with_ack_async(uint32_t , uint8_t ,
+                                 command_result_callback_t ,
+                                 uint8_t component_id = 0) { (void)component_id; }
 
     virtual MavlinkCommands::Result set_msg_rate(uint16_t , double ) 
     { return MavlinkCommands::Result::NO_DEVICE; }
@@ -92,12 +106,14 @@ public:
     // Non-copyable
     DeviceImpl(const DeviceImpl &) = delete;
     const DeviceImpl &operator=(const DeviceImpl &) = delete;
+    virtual uint8_t get_device_type() const { return _device_type; }
 
 protected:
 
     // TODO: should our own system ID have some value?
     static constexpr uint8_t _own_system_id = 0;
     static constexpr uint8_t _own_component_id = MAV_COMP_ID_SYSTEM_CONTROL;
+    uint8_t _device_type;
 };
 
 

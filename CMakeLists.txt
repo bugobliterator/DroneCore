@@ -10,7 +10,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-DDEBUG")
 if(NOT MSVC)
     # Clang and GCC
     # We are not using exceptions to make it easier to write wrappers.
-    add_definitions("-std=c++11 -Wall -Wextra -Werror -fno-exceptions")
+    add_definitions("-std=c++11 -g -Wall -Wextra -Werror -fno-exceptions")
     set(platform_libs "pthread")
     set(curl_lib "curl")
 else()
@@ -70,7 +70,7 @@ add_library(dronecore STATIC
     core/global_include.cpp
     core/connection.cpp
     core/device.cpp
-    core/device_impl.cpp
+    core/device_px4.cpp
     core/mavlink_parameters.cpp
     core/mavlink_commands.cpp
     core/dronecore.cpp

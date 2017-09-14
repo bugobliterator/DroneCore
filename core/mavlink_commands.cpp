@@ -97,6 +97,72 @@ MavlinkCommands::Result MavlinkCommands::send_command(uint16_t command,
 #endif
 }
 
+MavlinkCommands::Result MavlinkCommands::set_mode(uint32_t base_mode,
+                                                  uint8_t custom_mode,
+                                                  uint8_t target_system_id,
+                                                  uint8_t target_component_id)
+{
+    // Some architectures sadly don't have the promises (yet). Therefore, we have this crude
+    // while loop to wait until the async task is done.
+#ifdef NO_PROMISES
+    {
+        std::lock_guard<std::mutex> lock(_promise_mutex);
+        // We can't buffer with this implementation.
+        if (_promise_state != PromiseState::IDLE) {
+            return Result::BUSY;
+        }
+
+        _promise_state = PromiseState::BUSY;
+        queue_set_mode_async(base_mode, custom_mode, target_system_id, target_component_id,
+                            std::bind(&MavlinkCommands::_promise_receive_command_result,
+                                      this, std::placeholders::_1, std::placeholders::_2));
+    }
+    while (true) {
+        {
+            std::lock_guard<std::mutex> lock(_promise_mutex);
+            if (_promise_state == PromiseState::DONE) {
+                _promise_state = PromiseState::IDLE;
+                return _promise_last_result;
+            }
+        }
+        // Check at 100 Hz.
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+#else
+    struct PromiseResult {
+        Result result;
+        float progress;
+    };
+
+    // We wrap the async call with a promise and future.
+    std::shared_ptr<std::promise<PromiseResult>> prom =
+                                                  std::make_shared<std::promise<PromiseResult>>();
+
+    queue_set_mode_async(base_mode, custom_mode, target_system_id, target_component_id,
+    [prom](Result result, float progress) {
+        PromiseResult promise_result {};
+        promise_result.result = result;
+        promise_result.progress = progress;
+        prom->set_value(promise_result);
+    }
+                           );
+
+    std::future<PromiseResult> res = prom->get_future();
+    while (true) {
+        // Block now to wait for result.
+        res.wait();
+
+        PromiseResult promise_result = res.get();
+
+        if (promise_result.result == Result::IN_PROGRESS) {
+            Debug() << "In progress: " << promise_result.progress;
+            continue;
+        }
+        return promise_result.result;
+    }
+#endif
+}
+
 #ifdef NO_PROMISES
 void MavlinkCommands::_promise_receive_command_result(Result result, float progress)
 {
@@ -133,6 +199,27 @@ void MavlinkCommands::queue_command_async(uint16_t command,
                                   params.v[4], params.v[5], params.v[6]);
     new_work.callback = callback;
     new_work.mavlink_command = command;
+    _work_queue.push_back(new_work);
+}
+
+void MavlinkCommands::queue_set_mode_async(uint32_t base_mode,
+                                          uint8_t custom_mode,
+                                          uint8_t target_system_id,
+                                          uint8_t target_component_id,
+                                          command_result_callback_t callback)
+{
+    // Debug() << "Command " << (int)command << " to send to " << (int)target_system_id << ", "
+    //         << (int)target_component_id;
+    (void)target_component_id;
+    Work new_work {};
+    mavlink_msg_set_mode_pack(_parent->get_own_system_id(),
+                                  _parent->get_own_component_id(),
+                                  &new_work.mavlink_message,
+                                  target_system_id,
+                                  base_mode,
+                                  custom_mode);
+    new_work.callback = callback;
+    new_work.mavlink_command = MAVLINK_MSG_ID_SET_MODE;
     _work_queue.push_back(new_work);
 }
 

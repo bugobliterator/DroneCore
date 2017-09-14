@@ -38,12 +38,22 @@ public:
                         uint8_t target_system_id,
                         uint8_t target_component_id);
 
+    Result set_mode(uint32_t base_mode,
+                    uint8_t custom_mode,
+                    uint8_t target_system_id,
+                    uint8_t target_component_id);
+
     void queue_command_async(uint16_t command,
                              const Params params,
                              uint8_t target_system_id,
                              uint8_t target_component_id,
                              command_result_callback_t callback);
 
+    void queue_set_mode_async(uint32_t base_mode,
+                              uint8_t custom_mode,
+                              uint8_t target_system_id,
+                              uint8_t target_component_id,
+                              command_result_callback_t callback);
     void do_work();
 
     static const int DEFAULT_COMPONENT_ID_AUTOPILOT = 1;

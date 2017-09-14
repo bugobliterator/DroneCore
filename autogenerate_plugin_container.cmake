@@ -151,16 +151,16 @@ foreach(class_name ${plugin_class_names})
     set(PLUGIN_MEMBER_STRING
         "${PLUGIN_MEMBER_STRING}    ${class_name} ${member_name};\n")
 
+    # set(PLUGIN_CTOR_STRING
+    #     "${PLUGIN_CTOR_STRING}    ${impl_member_name}(new ${impl_class_name}()),\n")
     set(PLUGIN_CTOR_STRING
-        "${PLUGIN_CTOR_STRING}    ${impl_member_name}(new ${impl_class_name}()),\n")
-    set(PLUGIN_CTOR_STRING
-        "${PLUGIN_CTOR_STRING}    ${member_name}(${impl_member_name}),\n")
+        "${PLUGIN_CTOR_STRING}    ${member_name}(_impl),\n")
 
-    set(PLUGIN_DTOR_STRING
-        "${PLUGIN_DTOR_STRING}    delete ${impl_member_name};\n")
+    # set(PLUGIN_DTOR_STRING
+    #    "${PLUGIN_DTOR_STRING}    delete ${impl_member_name};\n")
 
     set(PLUGIN_LIST_APPEND_STRING
-        "${PLUGIN_LIST_APPEND_STRING}   _plugin_impl_list.push_back(${impl_member_name});\n")
+        "${PLUGIN_LIST_APPEND_STRING}   _plugin_impl_list.push_back((PluginImplBase*)${member_name}.get_impl());\n")
 
 endforeach()
 

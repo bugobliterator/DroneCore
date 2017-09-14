@@ -5,7 +5,7 @@
 namespace dronecore {
 
 class TelemetryImpl;
-
+class DeviceImpl;
 /**
  * @brief This class allows users to get vehicle telemetry and state information
  * (e.g. battery, GPS, RC connection, flight mode etc.) and set telemetry update rates.
@@ -16,7 +16,7 @@ public:
     /**
      * @brief Constructor (internal use only).
      */
-    explicit Telemetry(TelemetryImpl *impl);
+    explicit Telemetry(DeviceImpl *impl);
 
     /**
      * @brief Destructor (internal use only).
@@ -615,9 +615,12 @@ public:
      */
     const Telemetry &operator=(const Telemetry &) = delete;
 
+    TelemetryImpl* get_impl() { return _impl; }
+
 private:
     /** @private Underlying implementation, set at instantiation */
     TelemetryImpl *_impl;
+    DeviceImpl *_device;
 };
 
 } // namespace dronecore

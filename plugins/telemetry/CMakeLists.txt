@@ -5,7 +5,8 @@ set(class_name
 
 set(source_files
     telemetry.cpp
-    telemetry_impl.cpp
+    telemetry_px4.cpp
+    telemetry_apm.cpp
     math_conversions.cpp
     PARENT_SCOPE
 )
@@ -18,5 +19,7 @@ set(header_files
 
 set(impl_header_files
     telemetry_impl.h
+    telemetry_px4.h
+    telemetry_apm.h
     PARENT_SCOPE
 )

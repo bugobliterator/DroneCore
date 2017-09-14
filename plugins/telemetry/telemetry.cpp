@@ -1,15 +1,32 @@
 #include "telemetry.h"
 #include "telemetry_impl.h"
+#include "telemetry_px4.h"
+#include "telemetry_apm.h"
+
 
 namespace dronecore {
 
-Telemetry::Telemetry(TelemetryImpl *impl) :
-    _impl(impl)
+Telemetry::Telemetry(DeviceImpl* device) :
+_device(device)
 {
+    switch(device->get_device_type()) {
+        case MAV_AUTOPILOT_PX4:
+            _impl = new PX4TelemetryImpl();
+            break;
+        case MAV_AUTOPILOT_ARDUPILOTMEGA:
+            _impl = new APMTelemetryImpl();
+            break;
+        default:
+            _impl = new PX4TelemetryImpl();
+            break;
+    }
 }
 
 Telemetry::~Telemetry()
 {
+    if(_impl != nullptr) {
+        delete _impl;
+    }
 }
 
 Telemetry::Result Telemetry::set_rate_position(double rate_hz)

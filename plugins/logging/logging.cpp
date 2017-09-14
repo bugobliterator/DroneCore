@@ -1,17 +1,20 @@
 #include "logging.h"
 #include "logging_impl.h"
-
+#include "device_impl.h"
 namespace dronecore {
 
-Logging::Logging(LoggingImpl *impl) :
-    _impl(impl)
+Logging::Logging(DeviceImpl *device) :
+    _device(device)
 {
+    _impl = new LoggingImpl();
 }
 
 Logging::~Logging()
 {
+    if(_impl != nullptr) {
+        delete _impl;
+    }
 }
-
 Logging::Result Logging::start_logging() const
 {
     return _impl->start_logging();

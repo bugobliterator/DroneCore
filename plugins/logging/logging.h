@@ -5,7 +5,7 @@
 namespace dronecore {
 
 class LoggingImpl;
-
+class DeviceImpl;
 /**
  * @brief The Logging class allows log data using logger and log streaming from the vehicle.
  *
@@ -17,7 +17,7 @@ public:
     /**
      * @brief Constructor (internal use only).
      */
-    explicit Logging(LoggingImpl *impl);
+    explicit Logging(DeviceImpl *device);
 
     /**
      * @brief Destructor (internal use only).
@@ -96,9 +96,11 @@ public:
     */
     const Logging &operator=(const Logging &) = delete;
 
+    LoggingImpl* get_impl() { return _impl; } 
 private:
     /** @private Underlying implementation, set at instantiation */
     LoggingImpl *_impl;
+    DeviceImpl *_device;
 };
 
 } // namespace dronecore

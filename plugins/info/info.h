@@ -5,7 +5,7 @@
 namespace dronecore {
 
 class InfoImpl;
-
+class DeviceImpl;
 /**
  * @brief The Info class provides basic info about the hardware and/or software of a device.
  */
@@ -15,7 +15,7 @@ public:
     /**
      * @brief Constructor (internal use only).
      */
-    explicit Info(InfoImpl *impl);
+    explicit Info(DeviceImpl *device);
 
     /**
      * @brief Destructor (internal use only).
@@ -81,9 +81,11 @@ public:
      */
     const Info &operator=(const Info &) = delete;
 
+    InfoImpl* get_impl() { return _impl; }
 private:
     /** @private Underlying implementation, set at instantiation */
     InfoImpl *_impl;
+    DeviceImpl *_device;
 };
 
 } // namespace dronecore

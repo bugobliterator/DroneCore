@@ -1,15 +1,19 @@
 #include "offboard.h"
 #include "offboard_impl.h"
-
+#include "device_impl.h"
 namespace dronecore {
 
-Offboard::Offboard(OffboardImpl *impl) :
-    _impl(impl)
+Offboard::Offboard(DeviceImpl *device) :
+    _device(device)
 {
+    _impl = new OffboardImpl();
 }
 
 Offboard::~Offboard()
 {
+    if(_impl != nullptr) {
+        delete _impl;
+    }
 }
 
 Offboard::Result Offboard::start() const

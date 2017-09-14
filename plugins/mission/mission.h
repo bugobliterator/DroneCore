@@ -8,7 +8,7 @@
 namespace dronecore {
 
 class MissionImpl;
-
+class DeviceImpl;
 /**
  * @brief The Mission class enables waypoint missions.
  */
@@ -18,7 +18,7 @@ public:
     /**
      * @brief Constructor (internal use only).
      */
-    explicit Mission(MissionImpl *impl);
+    explicit Mission(DeviceImpl *device);
 
     /**
      * @brief Destructor (internal use only).
@@ -147,9 +147,12 @@ public:
     */
     const Mission &operator=(const Mission &) = delete;
 
+    MissionImpl* get_impl() { return _impl; } 
+
 private:
     /** @private Underlying implementation, set at instantiation */
     MissionImpl *_impl;
+    DeviceImpl *_device;
 };
 
 } // namespace dronecore

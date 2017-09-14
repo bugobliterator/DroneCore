@@ -5,7 +5,7 @@
 namespace dronecore {
 
 class OffboardImpl;
-
+class DeviceImpl;
 /**
  * @brief This class is used to control a drone with velocity commands.
  *
@@ -20,7 +20,7 @@ public:
     /**
      * @brief Constructor (internal use only).
      */
-    explicit Offboard(OffboardImpl *impl);
+    explicit Offboard(DeviceImpl *device);
 
     /**
      * @brief Destructor (internal use only).
@@ -130,9 +130,11 @@ public:
      */
     const Offboard &operator=(const Offboard &) = delete;
 
+    OffboardImpl* get_impl() { return _impl; }
 private:
     /** @private Underlying implementation, set at instantiation */
     OffboardImpl *_impl;
+    DeviceImpl *_device;
 };
 
 } // namespace dronecore

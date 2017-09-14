@@ -1,18 +1,21 @@
 #include "mission.h"
 #include "mission_impl.h"
 #include <vector>
-
+#include "device_impl.h"
 namespace dronecore {
 
-Mission::Mission(MissionImpl *impl) :
-    _impl(impl)
+Mission::Mission(DeviceImpl *device) :
+    _device(device)
 {
+    _impl = new MissionImpl();
 }
 
 Mission::~Mission()
 {
+    if(_impl != nullptr) {
+        delete _impl;
+    }
 }
-
 
 void Mission::send_mission_async(const std::vector<std::shared_ptr<MissionItem>> &mission_items,
                                  result_callback_t callback)

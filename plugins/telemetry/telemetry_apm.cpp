@@ -1,5 +1,5 @@
-#include "telemetry_impl.h"
-#include "device_impl.h"
+#include "telemetry_apm.h"
+#include "device_apm.h"
 #include "math_conversions.h"
 #include "global_include.h"
 #include "px4_custom_mode.h"
@@ -8,7 +8,7 @@
 
 namespace dronecore {
 
-TelemetryImpl::TelemetryImpl() :
+APMTelemetryImpl::APMTelemetryImpl() :
     _position_mutex(),
     _position(Telemetry::Position {NAN, NAN, NAN, NAN}),
     _home_position_mutex(),
@@ -51,234 +51,202 @@ TelemetryImpl::TelemetryImpl() :
 {
 }
 
-TelemetryImpl::~TelemetryImpl()
+APMTelemetryImpl::~APMTelemetryImpl()
 {
 }
 
-void TelemetryImpl::init()
+
+void APMTelemetryImpl::init()
 {
     using namespace std::placeholders; // for `_1`
 
-    _parent->register_mavlink_message_handler(
+    ((APMDeviceImpl*)_parent)->register_mavlink_message_handler(
         MAVLINK_MSG_ID_GLOBAL_POSITION_INT,
-        std::bind(&TelemetryImpl::process_global_position_int, this, _1), (void *)this);
+        std::bind(&APMTelemetryImpl::process_global_position_int, this, _1), (void *)this);
 
-    _parent->register_mavlink_message_handler(
+    ((APMDeviceImpl*)_parent)->register_mavlink_message_handler(
         MAVLINK_MSG_ID_HOME_POSITION,
-        std::bind(&TelemetryImpl::process_home_position, this, _1), (void *)this);
+        std::bind(&APMTelemetryImpl::process_home_position, this, _1), (void *)this);
 
-    _parent->register_mavlink_message_handler(
-        MAVLINK_MSG_ID_ATTITUDE_QUATERNION,
-        std::bind(&TelemetryImpl::process_attitude_quaternion, this, _1), (void *)this);
+    ((APMDeviceImpl*)_parent)->register_mavlink_message_handler(
+        MAVLINK_MSG_ID_ATTITUDE,
+        std::bind(&APMTelemetryImpl::process_attitude, this, _1), (void *)this);
 
-    _parent->register_mavlink_message_handler(
+    ((APMDeviceImpl*)_parent)->register_mavlink_message_handler(
         MAVLINK_MSG_ID_MOUNT_ORIENTATION,
-        std::bind(&TelemetryImpl::process_mount_orientation, this, _1), (void *)this);
+        std::bind(&APMTelemetryImpl::process_mount_orientation, this, _1), (void *)this);
 
-    _parent->register_mavlink_message_handler(
+    ((APMDeviceImpl*)_parent)->register_mavlink_message_handler(
         MAVLINK_MSG_ID_GPS_RAW_INT,
-        std::bind(&TelemetryImpl::process_gps_raw_int, this, _1), (void *)this);
+        std::bind(&APMTelemetryImpl::process_gps_raw_int, this, _1), (void *)this);
 
-    _parent->register_mavlink_message_handler(
+    ((APMDeviceImpl*)_parent)->register_mavlink_message_handler(
         MAVLINK_MSG_ID_EXTENDED_SYS_STATE,
-        std::bind(&TelemetryImpl::process_extended_sys_state, this, _1), (void *)this);
+        std::bind(&APMTelemetryImpl::process_extended_sys_state, this, _1), (void *)this);
 
-    _parent->register_mavlink_message_handler(
+    ((APMDeviceImpl*)_parent)->register_mavlink_message_handler(
         MAVLINK_MSG_ID_SYS_STATUS,
-        std::bind(&TelemetryImpl::process_sys_status, this, _1), (void *)this);
+        std::bind(&APMTelemetryImpl::process_sys_status, this, _1), (void *)this);
 
-    _parent->register_mavlink_message_handler(
+    ((APMDeviceImpl*)_parent)->register_mavlink_message_handler(
         MAVLINK_MSG_ID_HEARTBEAT,
-        std::bind(&TelemetryImpl::process_heartbeat, this, _1), (void *)this);
+        std::bind(&APMTelemetryImpl::process_heartbeat, this, _1), (void *)this);
 
-    _parent->register_mavlink_message_handler(
+    ((APMDeviceImpl*)_parent)->register_mavlink_message_handler(
         MAVLINK_MSG_ID_RC_CHANNELS,
-        std::bind(&TelemetryImpl::process_rc_channels, this, _1), (void *)this);
+        std::bind(&APMTelemetryImpl::process_rc_channels, this, _1), (void *)this);
 
-    _parent->register_timeout_handler(
-        std::bind(&TelemetryImpl::receive_rc_channels_timeout, this), 1.0, (const void *)this);
+    ((APMDeviceImpl*)_parent)->register_timeout_handler(
+        std::bind(&APMTelemetryImpl::receive_rc_channels_timeout, this), 1.0, (const void *)this);
 
-    // FIXME: The calibration check should eventually be better than this.
-    //        For now, we just do the same as QGC does.
-
-    _parent->get_param_int_async(std::string("CAL_GYRO0_ID"),
-                                 std::bind(&TelemetryImpl::receive_param_cal_gyro,
-                                           this,
-                                           std::placeholders::_1,
-                                           std::placeholders::_2));
-
-    _parent->get_param_int_async(std::string("CAL_ACC0_ID"),
-                                 std::bind(&TelemetryImpl::receive_param_cal_accel,
-                                           this,
-                                           std::placeholders::_1,
-                                           std::placeholders::_2));
-
-    _parent->get_param_int_async(std::string("CAL_MAG0_ID"),
-                                 std::bind(&TelemetryImpl::receive_param_cal_mag,
-                                           this,
-                                           std::placeholders::_1,
-                                           std::placeholders::_2));
-
-#ifdef LEVEL_CALIBRATION
-    _parent->get_param_float_async(std::string("SENS_BOARD_X_OFF"),
-                                   std::bind(&TelemetryImpl::receive_param_cal_level,
-                                             this,
-                                             std::placeholders::_1,
-                                             std::placeholders::_2));
-#else
     // If not available, just hardcode it to true.
     set_health_level_calibration(true);
-#endif
+
 }
 
-void TelemetryImpl::deinit()
+void APMTelemetryImpl::deinit()
 {
-    _parent->unregister_all_mavlink_message_handlers((void *)this);
+    ((APMDeviceImpl*)_parent)->unregister_all_mavlink_message_handlers((void *)this);
 }
 
-Telemetry::Result TelemetryImpl::set_rate_position(double rate_hz)
+Telemetry::Result APMTelemetryImpl::set_rate_position(double rate_hz)
 {
     _position_rate_hz = rate_hz;
     double max_rate_hz = std::max(_position_rate_hz, _ground_speed_ned_rate_hz);
-
     return telemetry_result_from_command_result(
-               _parent->set_msg_rate(MAVLINK_MSG_ID_GLOBAL_POSITION_INT, max_rate_hz));
+               ((APMDeviceImpl*)_parent)->set_msg_rate(MAV_DATA_STREAM_POSITION, max_rate_hz));
 }
 
-Telemetry::Result TelemetryImpl::set_rate_home_position(double rate_hz)
+Telemetry::Result APMTelemetryImpl::set_rate_home_position(double rate_hz)
+{
+    (void)rate_hz;
+    return  Telemetry::Result::COMMAND_DENIED;
+}
+
+Telemetry::Result APMTelemetryImpl::set_rate_in_air(double rate_hz)
+{
+    (void)rate_hz;
+    return  Telemetry::Result::COMMAND_DENIED;
+}
+
+Telemetry::Result APMTelemetryImpl::set_rate_attitude(double rate_hz)
 {
     return telemetry_result_from_command_result(
-               _parent->set_msg_rate(MAVLINK_MSG_ID_HOME_POSITION, rate_hz));
+               ((APMDeviceImpl*)_parent)->set_msg_rate(MAV_DATA_STREAM_EXTRA1, rate_hz));
 }
 
-Telemetry::Result TelemetryImpl::set_rate_in_air(double rate_hz)
+Telemetry::Result APMTelemetryImpl::set_rate_camera_attitude(double rate_hz)
 {
     return telemetry_result_from_command_result(
-               _parent->set_msg_rate(MAVLINK_MSG_ID_EXTENDED_SYS_STATE, rate_hz));
+               ((APMDeviceImpl*)_parent)->set_msg_rate(MAV_DATA_STREAM_EXTRA3, rate_hz));
 }
 
-Telemetry::Result TelemetryImpl::set_rate_attitude(double rate_hz)
-{
-    return telemetry_result_from_command_result(
-               _parent->set_msg_rate(MAVLINK_MSG_ID_ATTITUDE_QUATERNION, rate_hz));
-}
-
-Telemetry::Result TelemetryImpl::set_rate_camera_attitude(double rate_hz)
-{
-    return telemetry_result_from_command_result(
-               _parent->set_msg_rate(MAVLINK_MSG_ID_MOUNT_ORIENTATION, rate_hz));
-}
-
-Telemetry::Result TelemetryImpl::set_rate_ground_speed_ned(double rate_hz)
+Telemetry::Result APMTelemetryImpl::set_rate_ground_speed_ned(double rate_hz)
 {
     _ground_speed_ned_rate_hz = rate_hz;
     double max_rate_hz = std::max(_position_rate_hz, _ground_speed_ned_rate_hz);
 
     return telemetry_result_from_command_result(
-               _parent->set_msg_rate(MAVLINK_MSG_ID_GLOBAL_POSITION_INT, max_rate_hz));
+               ((APMDeviceImpl*)_parent)->set_msg_rate(MAV_DATA_STREAM_EXTRA2, max_rate_hz));
 }
 
-Telemetry::Result TelemetryImpl::set_rate_gps_info(double rate_hz)
+Telemetry::Result APMTelemetryImpl::set_rate_gps_info(double rate_hz)
 {
     return telemetry_result_from_command_result(
-               _parent->set_msg_rate(MAVLINK_MSG_ID_GPS_RAW_INT, rate_hz));
+               ((APMDeviceImpl*)_parent)->set_msg_rate(MAV_DATA_STREAM_EXTENDED_STATUS, rate_hz));
 }
 
-Telemetry::Result TelemetryImpl::set_rate_battery(double rate_hz)
+Telemetry::Result APMTelemetryImpl::set_rate_battery(double rate_hz)
 {
     return telemetry_result_from_command_result(
-               _parent->set_msg_rate(MAVLINK_MSG_ID_SYS_STATUS, rate_hz));
+               ((APMDeviceImpl*)_parent)->set_msg_rate(MAV_DATA_STREAM_EXTENDED_STATUS, rate_hz));
 }
 
-Telemetry::Result TelemetryImpl::set_rate_rc_status(double rate_hz)
+Telemetry::Result APMTelemetryImpl::set_rate_rc_status(double rate_hz)
 {
     return telemetry_result_from_command_result(
-               _parent->set_msg_rate(MAVLINK_MSG_ID_RC_CHANNELS, rate_hz));
+               ((APMDeviceImpl*)_parent)->set_msg_rate(MAV_DATA_STREAM_RC_CHANNELS, rate_hz));
 }
 
-void TelemetryImpl::set_rate_position_async(double rate_hz, Telemetry::result_callback_t callback)
+void APMTelemetryImpl::set_rate_position_async(double rate_hz, Telemetry::result_callback_t callback)
 {
     _position_rate_hz = rate_hz;
     double max_rate_hz = std::max(_position_rate_hz, _ground_speed_ned_rate_hz);
 
-    _parent->set_msg_rate_async(
+    ((APMDeviceImpl*)_parent)->set_msg_rate_async(
         MAVLINK_MSG_ID_GLOBAL_POSITION_INT,
         max_rate_hz,
-        std::bind(&TelemetryImpl::command_result_callback, std::placeholders::_1, callback));
+        std::bind(&APMTelemetryImpl::command_result_callback, std::placeholders::_1, callback));
 
 }
 
-void TelemetryImpl::set_rate_home_position_async(double rate_hz,
+void APMTelemetryImpl::set_rate_home_position_async(double rate_hz,
                                                  Telemetry::result_callback_t callback)
 {
-    _parent->set_msg_rate_async(
-        MAVLINK_MSG_ID_HOME_POSITION,
-        rate_hz,
-        std::bind(&TelemetryImpl::command_result_callback, std::placeholders::_1, callback));
+    (void)rate_hz;
+    (void)callback;
 }
 
-void TelemetryImpl::set_rate_in_air_async(double rate_hz, Telemetry::result_callback_t callback)
+void APMTelemetryImpl::set_rate_in_air_async(double rate_hz, Telemetry::result_callback_t callback)
 {
-    _parent->set_msg_rate_async(
-        MAVLINK_MSG_ID_EXTENDED_SYS_STATE,
-        rate_hz,
-        std::bind(&TelemetryImpl::command_result_callback, std::placeholders::_1, callback));
+    (void)rate_hz;
+    (void)callback;
 }
 
-void TelemetryImpl::set_rate_attitude_async(double rate_hz, Telemetry::result_callback_t callback)
+void APMTelemetryImpl::set_rate_attitude_async(double rate_hz, Telemetry::result_callback_t callback)
 {
-    _parent->set_msg_rate_async(
-        MAVLINK_MSG_ID_ATTITUDE_QUATERNION,
+    ((APMDeviceImpl*)_parent)->set_msg_rate_async(
+        MAV_DATA_STREAM_EXTRA1,
         rate_hz,
-        std::bind(&TelemetryImpl::command_result_callback, std::placeholders::_1, callback));
+        std::bind(&APMTelemetryImpl::command_result_callback, std::placeholders::_1, callback));
 }
 
-void TelemetryImpl::set_rate_camera_attitude_async(double rate_hz,
+void APMTelemetryImpl::set_rate_camera_attitude_async(double rate_hz,
                                                    Telemetry::result_callback_t callback)
 {
-    _parent->set_msg_rate_async(
-        MAVLINK_MSG_ID_MOUNT_ORIENTATION,
+    ((APMDeviceImpl*)_parent)->set_msg_rate_async(
+        MAV_DATA_STREAM_EXTRA3,
         rate_hz,
-        std::bind(&TelemetryImpl::command_result_callback, std::placeholders::_1, callback));
+        std::bind(&APMTelemetryImpl::command_result_callback, std::placeholders::_1, callback));
 }
 
-void TelemetryImpl::set_rate_ground_speed_ned_async(double rate_hz,
+void APMTelemetryImpl::set_rate_ground_speed_ned_async(double rate_hz,
                                                     Telemetry::result_callback_t callback)
 {
     _ground_speed_ned_rate_hz = rate_hz;
     double max_rate_hz = std::max(_position_rate_hz, _ground_speed_ned_rate_hz);
 
-    _parent->set_msg_rate_async(
-        MAVLINK_MSG_ID_GLOBAL_POSITION_INT,
+    ((APMDeviceImpl*)_parent)->set_msg_rate_async(
+        MAV_DATA_STREAM_EXTRA2,
         max_rate_hz,
-        std::bind(&TelemetryImpl::command_result_callback, std::placeholders::_1, callback));
+        std::bind(&APMTelemetryImpl::command_result_callback, std::placeholders::_1, callback));
 }
 
-void TelemetryImpl::set_rate_gps_info_async(double rate_hz, Telemetry::result_callback_t callback)
+void APMTelemetryImpl::set_rate_gps_info_async(double rate_hz, Telemetry::result_callback_t callback)
 {
-    _parent->set_msg_rate_async(
-        MAVLINK_MSG_ID_GPS_RAW_INT,
+    ((APMDeviceImpl*)_parent)->set_msg_rate_async(
+        MAV_DATA_STREAM_EXTENDED_STATUS,
         rate_hz,
-        std::bind(&TelemetryImpl::command_result_callback, std::placeholders::_1, callback));
+        std::bind(&APMTelemetryImpl::command_result_callback, std::placeholders::_1, callback));
 }
 
-void TelemetryImpl::set_rate_battery_async(double rate_hz, Telemetry::result_callback_t callback)
+void APMTelemetryImpl::set_rate_battery_async(double rate_hz, Telemetry::result_callback_t callback)
 {
-    _parent->set_msg_rate_async(
-        MAVLINK_MSG_ID_SYS_STATUS,
+    ((APMDeviceImpl*)_parent)->set_msg_rate_async(
+        MAV_DATA_STREAM_EXTENDED_STATUS,
         rate_hz,
-        std::bind(&TelemetryImpl::command_result_callback, std::placeholders::_1, callback));
+        std::bind(&APMTelemetryImpl::command_result_callback, std::placeholders::_1, callback));
 }
 
-void TelemetryImpl::set_rate_rc_status_async(double rate_hz, Telemetry::result_callback_t callback)
+void APMTelemetryImpl::set_rate_rc_status_async(double rate_hz, Telemetry::result_callback_t callback)
 {
-    _parent->set_msg_rate_async(
-        MAVLINK_MSG_ID_RC_CHANNELS,
+    ((APMDeviceImpl*)_parent)->set_msg_rate_async(
+        MAV_DATA_STREAM_RC_CHANNELS,
         rate_hz,
-        std::bind(&TelemetryImpl::command_result_callback, std::placeholders::_1, callback));
+        std::bind(&APMTelemetryImpl::command_result_callback, std::placeholders::_1, callback));
 }
 
-Telemetry::Result TelemetryImpl::telemetry_result_from_command_result(
+Telemetry::Result APMTelemetryImpl::telemetry_result_from_command_result(
     MavlinkCommands::Result command_result)
 {
     switch (command_result) {
@@ -299,7 +267,7 @@ Telemetry::Result TelemetryImpl::telemetry_result_from_command_result(
     }
 }
 
-void TelemetryImpl::command_result_callback(MavlinkCommands::Result command_result,
+void APMTelemetryImpl::command_result_callback(MavlinkCommands::Result command_result,
                                             const Telemetry::result_callback_t &callback)
 {
     Telemetry::Result action_result = telemetry_result_from_command_result(command_result);
@@ -307,7 +275,7 @@ void TelemetryImpl::command_result_callback(MavlinkCommands::Result command_resu
     callback(action_result);
 }
 
-void TelemetryImpl::process_global_position_int(const mavlink_message_t &message)
+void APMTelemetryImpl::process_global_position_int(const mavlink_message_t &message)
 {
     mavlink_global_position_int_t global_position_int;
     mavlink_msg_global_position_int_decode(&message, &global_position_int);
@@ -330,7 +298,7 @@ void TelemetryImpl::process_global_position_int(const mavlink_message_t &message
     }
 }
 
-void TelemetryImpl::process_home_position(const mavlink_message_t &message)
+void APMTelemetryImpl::process_home_position(const mavlink_message_t &message)
 {
     mavlink_home_position_t home_position;
     mavlink_msg_home_position_decode(&message, &home_position);
@@ -348,19 +316,18 @@ void TelemetryImpl::process_home_position(const mavlink_message_t &message)
     }
 }
 
-void TelemetryImpl::process_attitude_quaternion(const mavlink_message_t &message)
+void APMTelemetryImpl::process_attitude(const mavlink_message_t &message)
 {
-    mavlink_attitude_quaternion_t attitude_quaternion;
-    mavlink_msg_attitude_quaternion_decode(&message, &attitude_quaternion);
+    mavlink_attitude_t attitude;
+    mavlink_msg_attitude_decode(&message, &attitude);
 
-    Telemetry::Quaternion quaternion {
-        attitude_quaternion.q1,
-        attitude_quaternion.q2,
-        attitude_quaternion.q3,
-        attitude_quaternion.q4
+    Telemetry::EulerAngle euler_angle {
+        attitude.roll,
+        attitude.pitch,
+        attitude.yaw
     };
 
-    set_attitude_quaternion(quaternion);
+    set_attitude_euler(euler_angle);
 
     if (_attitude_quaternion_subscription) {
         _attitude_quaternion_subscription(get_attitude_quaternion());
@@ -371,7 +338,7 @@ void TelemetryImpl::process_attitude_quaternion(const mavlink_message_t &message
     }
 }
 
-void TelemetryImpl::process_mount_orientation(const mavlink_message_t &message)
+void APMTelemetryImpl::process_mount_orientation(const mavlink_message_t &message)
 {
     mavlink_mount_orientation_t mount_orientation;
     mavlink_msg_mount_orientation_decode(&message, &mount_orientation);
@@ -393,7 +360,7 @@ void TelemetryImpl::process_mount_orientation(const mavlink_message_t &message)
     }
 }
 
-void TelemetryImpl::process_gps_raw_int(const mavlink_message_t &message)
+void APMTelemetryImpl::process_gps_raw_int(const mavlink_message_t &message)
 {
     mavlink_gps_raw_int_t gps_raw_int;
     mavlink_msg_gps_raw_int_decode(&message, &gps_raw_int);
@@ -415,7 +382,7 @@ void TelemetryImpl::process_gps_raw_int(const mavlink_message_t &message)
     }
 }
 
-void TelemetryImpl::process_extended_sys_state(const mavlink_message_t &message)
+void APMTelemetryImpl::process_extended_sys_state(const mavlink_message_t &message)
 {
     mavlink_extended_sys_state_t extended_sys_state;
     mavlink_msg_extended_sys_state_decode(&message, &extended_sys_state);
@@ -433,7 +400,7 @@ void TelemetryImpl::process_extended_sys_state(const mavlink_message_t &message)
 
 }
 
-void TelemetryImpl::process_sys_status(const mavlink_message_t &message)
+void APMTelemetryImpl::process_sys_status(const mavlink_message_t &message)
 {
     mavlink_sys_status_t sys_status;
     mavlink_msg_sys_status_decode(&message, &sys_status);
@@ -447,7 +414,7 @@ void TelemetryImpl::process_sys_status(const mavlink_message_t &message)
     }
 }
 
-void TelemetryImpl::process_heartbeat(const mavlink_message_t &message)
+void APMTelemetryImpl::process_heartbeat(const mavlink_message_t &message)
 {
     mavlink_heartbeat_t heartbeat;
     mavlink_msg_heartbeat_decode(&message, &heartbeat);
@@ -468,6 +435,17 @@ void TelemetryImpl::process_heartbeat(const mavlink_message_t &message)
         }
     }
 
+    if (heartbeat.system_status == MAV_STATE_ACTIVE) {
+        set_in_air(true);
+    } else if (heartbeat.system_status == MAV_STATE_STANDBY) {
+        set_in_air(false);
+    }
+    // If state is CRITICAL, we use what we have received last.
+
+    if (_in_air_subscription) {
+        _in_air_subscription(in_air());
+    }
+
     if (_health_subscription) {
         _health_subscription(get_health());
     }
@@ -476,7 +454,7 @@ void TelemetryImpl::process_heartbeat(const mavlink_message_t &message)
     }
 }
 
-void TelemetryImpl::process_rc_channels(const mavlink_message_t &message)
+void APMTelemetryImpl::process_rc_channels(const mavlink_message_t &message)
 {
     mavlink_rc_channels_t rc_channels;
     mavlink_msg_rc_channels_decode(&message, &rc_channels);
@@ -484,10 +462,10 @@ void TelemetryImpl::process_rc_channels(const mavlink_message_t &message)
     bool rc_ok = (rc_channels.chancount > 0);
     set_rc_status(rc_ok, rc_channels.rssi);
 
-    _parent->refresh_timeout_handler(this);
+    ((APMDeviceImpl*)_parent)->refresh_timeout_handler(this);
 }
 
-Telemetry::FlightMode TelemetryImpl::to_flight_mode_from_custom_mode(uint32_t custom_mode)
+Telemetry::FlightMode APMTelemetryImpl::to_flight_mode_from_custom_mode(uint32_t custom_mode)
 {
     px4::px4_custom_mode px4_custom_mode;
     px4_custom_mode.data = custom_mode;
@@ -517,7 +495,7 @@ Telemetry::FlightMode TelemetryImpl::to_flight_mode_from_custom_mode(uint32_t cu
     }
 }
 
-void TelemetryImpl::receive_param_cal_gyro(bool success, int value)
+void APMTelemetryImpl::receive_param_cal_gyro(bool success, int value)
 {
     if (!success) {
         Debug() << "Error: Param for gyro cal failed.";
@@ -528,7 +506,7 @@ void TelemetryImpl::receive_param_cal_gyro(bool success, int value)
     set_health_gyrometer_calibration(ok);
 }
 
-void TelemetryImpl::receive_param_cal_accel(bool success, int value)
+void APMTelemetryImpl::receive_param_cal_accel(bool success, int value)
 {
     if (!success) {
         Debug() << "Error: Param for accel cal failed.";
@@ -539,7 +517,7 @@ void TelemetryImpl::receive_param_cal_accel(bool success, int value)
     set_health_accelerometer_calibration(ok);
 }
 
-void TelemetryImpl::receive_param_cal_mag(bool success, int value)
+void APMTelemetryImpl::receive_param_cal_mag(bool success, int value)
 {
     if (!success) {
         Debug() << "Error: Param for mag cal failed.";
@@ -551,7 +529,7 @@ void TelemetryImpl::receive_param_cal_mag(bool success, int value)
 }
 
 #ifdef LEVEL_CALIBRATION
-void TelemetryImpl::receive_param_cal_level(bool success, float value)
+void APMTelemetryImpl::receive_param_cal_level(bool success, float value)
 {
     if (!success) {
         Debug() << "Error: Param for level cal failed.";
@@ -563,63 +541,63 @@ void TelemetryImpl::receive_param_cal_level(bool success, float value)
 }
 #endif
 
-void TelemetryImpl::receive_rc_channels_timeout()
+void APMTelemetryImpl::receive_rc_channels_timeout()
 {
     const bool rc_ok = false;
     set_rc_status(rc_ok, 0.0f);
 }
 
-Telemetry::Position TelemetryImpl::get_position() const
+Telemetry::Position APMTelemetryImpl::get_position() const
 {
     std::lock_guard<std::mutex> lock(_position_mutex);
     return _position;
 }
 
-void TelemetryImpl::set_position(Telemetry::Position position)
+void APMTelemetryImpl::set_position(Telemetry::Position position)
 {
     std::lock_guard<std::mutex> lock(_position_mutex);
     _position = position;
 }
 
-Telemetry::Position TelemetryImpl::get_home_position() const
+Telemetry::Position APMTelemetryImpl::get_home_position() const
 {
     std::lock_guard<std::mutex> lock(_home_position_mutex);
     return _home_position;
 }
 
-void TelemetryImpl::set_home_position(Telemetry::Position home_position)
+void APMTelemetryImpl::set_home_position(Telemetry::Position home_position)
 {
     std::lock_guard<std::mutex> lock(_home_position_mutex);
     _home_position = home_position;
 }
 
-bool TelemetryImpl::in_air() const
+bool APMTelemetryImpl::in_air() const
 {
     return _in_air;
 }
 
-bool TelemetryImpl::armed() const
+bool APMTelemetryImpl::armed() const
 {
     return _armed;
 }
 
-void TelemetryImpl::set_in_air(bool in_air)
+void APMTelemetryImpl::set_in_air(bool in_air)
 {
     _in_air = in_air;
 }
 
-void TelemetryImpl::set_armed(bool armed)
+void APMTelemetryImpl::set_armed(bool armed)
 {
     _armed = armed;
 }
 
-Telemetry::Quaternion TelemetryImpl::get_attitude_quaternion() const
+Telemetry::Quaternion APMTelemetryImpl::get_attitude_quaternion() const
 {
     std::lock_guard<std::mutex> lock(_attitude_quaternion_mutex);
     return _attitude_quaternion;
 }
 
-Telemetry::EulerAngle TelemetryImpl::get_attitude_euler_angle() const
+Telemetry::EulerAngle APMTelemetryImpl::get_attitude_euler_angle() const
 {
     std::lock_guard<std::mutex> lock(_attitude_quaternion_mutex);
     Telemetry::EulerAngle euler = to_euler_angle_from_quaternion(_attitude_quaternion);
@@ -627,13 +605,21 @@ Telemetry::EulerAngle TelemetryImpl::get_attitude_euler_angle() const
     return euler;
 }
 
-void TelemetryImpl::set_attitude_quaternion(Telemetry::Quaternion quaternion)
+void APMTelemetryImpl::set_attitude_quaternion(Telemetry::Quaternion quaternion)
 {
     std::lock_guard<std::mutex> lock(_attitude_quaternion_mutex);
     _attitude_quaternion = quaternion;
 }
 
-Telemetry::Quaternion TelemetryImpl::get_camera_attitude_quaternion() const
+void APMTelemetryImpl::set_attitude_euler(Telemetry::EulerAngle euler_angle)
+{
+    std::lock_guard<std::mutex> alock(_attitude_euler_angle_mutex);
+    std::lock_guard<std::mutex> qlock(_attitude_quaternion_mutex);
+    _attitude_euler = euler_angle;
+    _attitude_quaternion = to_quaternion_from_euler_angle(euler_angle);
+}
+
+Telemetry::Quaternion APMTelemetryImpl::get_camera_attitude_quaternion() const
 {
     std::lock_guard<std::mutex> lock(_camera_attitude_euler_angle_mutex);
     Telemetry::Quaternion quaternion
@@ -642,74 +628,74 @@ Telemetry::Quaternion TelemetryImpl::get_camera_attitude_quaternion() const
     return quaternion;
 }
 
-Telemetry::EulerAngle TelemetryImpl::get_camera_attitude_euler_angle() const
+Telemetry::EulerAngle APMTelemetryImpl::get_camera_attitude_euler_angle() const
 {
     std::lock_guard<std::mutex> lock(_camera_attitude_euler_angle_mutex);
 
     return _camera_attitude_euler_angle;
 }
 
-void TelemetryImpl::set_camera_attitude_euler_angle(Telemetry::EulerAngle euler_angle)
+void APMTelemetryImpl::set_camera_attitude_euler_angle(Telemetry::EulerAngle euler_angle)
 {
     std::lock_guard<std::mutex> lock(_camera_attitude_euler_angle_mutex);
     _camera_attitude_euler_angle = euler_angle;
 }
 
-Telemetry::GroundSpeedNED TelemetryImpl::get_ground_speed_ned() const
+Telemetry::GroundSpeedNED APMTelemetryImpl::get_ground_speed_ned() const
 {
     std::lock_guard<std::mutex> lock(_ground_speed_ned_mutex);
     return _ground_speed_ned;
 }
 
-void TelemetryImpl::set_ground_speed_ned(Telemetry::GroundSpeedNED ground_speed_ned)
+void APMTelemetryImpl::set_ground_speed_ned(Telemetry::GroundSpeedNED ground_speed_ned)
 {
     std::lock_guard<std::mutex> lock(_ground_speed_ned_mutex);
     _ground_speed_ned = ground_speed_ned;
 }
 
-Telemetry::GPSInfo TelemetryImpl::get_gps_info() const
+Telemetry::GPSInfo APMTelemetryImpl::get_gps_info() const
 {
     std::lock_guard<std::mutex> lock(_gps_info_mutex);
     return _gps_info;
 }
 
-void TelemetryImpl::set_gps_info(Telemetry::GPSInfo gps_info)
+void APMTelemetryImpl::set_gps_info(Telemetry::GPSInfo gps_info)
 {
     std::lock_guard<std::mutex> lock(_gps_info_mutex);
     _gps_info = gps_info;
 }
 
-Telemetry::Battery TelemetryImpl::get_battery() const
+Telemetry::Battery APMTelemetryImpl::get_battery() const
 {
     std::lock_guard<std::mutex> lock(_battery_mutex);
     return _battery;
 }
 
-void TelemetryImpl::set_battery(Telemetry::Battery battery)
+void APMTelemetryImpl::set_battery(Telemetry::Battery battery)
 {
     std::lock_guard<std::mutex> lock(_battery_mutex);
     _battery = battery;
 }
 
-Telemetry::FlightMode TelemetryImpl::get_flight_mode() const
+Telemetry::FlightMode APMTelemetryImpl::get_flight_mode() const
 {
     std::lock_guard<std::mutex> lock(_flight_mode_mutex);
     return _flight_mode;
 }
 
-void TelemetryImpl::set_flight_mode(Telemetry::FlightMode flight_mode)
+void APMTelemetryImpl::set_flight_mode(Telemetry::FlightMode flight_mode)
 {
     std::lock_guard<std::mutex> lock(_flight_mode_mutex);
     _flight_mode = flight_mode;
 }
 
-Telemetry::Health TelemetryImpl::get_health() const
+Telemetry::Health APMTelemetryImpl::get_health() const
 {
     std::lock_guard<std::mutex> lock(_health_mutex);
     return _health;
 }
 
-bool TelemetryImpl::get_health_all_ok() const
+bool APMTelemetryImpl::get_health_all_ok() const
 {
     std::lock_guard<std::mutex> lock(_health_mutex);
     if (_health.gyrometer_calibration_ok &&
@@ -725,55 +711,55 @@ bool TelemetryImpl::get_health_all_ok() const
     }
 }
 
-Telemetry::RCStatus TelemetryImpl::get_rc_status() const
+Telemetry::RCStatus APMTelemetryImpl::get_rc_status() const
 {
     std::lock_guard<std::mutex> lock(_rc_status_mutex);
     return _rc_status;
 }
 
-void TelemetryImpl::set_health_local_position(bool ok)
+void APMTelemetryImpl::set_health_local_position(bool ok)
 {
     std::lock_guard<std::mutex> lock(_health_mutex);
     _health.local_position_ok = ok;
 }
 
-void TelemetryImpl::set_health_global_position(bool ok)
+void APMTelemetryImpl::set_health_global_position(bool ok)
 {
     std::lock_guard<std::mutex> lock(_health_mutex);
     _health.global_position_ok = ok;
 }
 
-void TelemetryImpl::set_health_home_position(bool ok)
+void APMTelemetryImpl::set_health_home_position(bool ok)
 {
     std::lock_guard<std::mutex> lock(_health_mutex);
     _health.home_position_ok = ok;
 }
 
-void TelemetryImpl::set_health_gyrometer_calibration(bool ok)
+void APMTelemetryImpl::set_health_gyrometer_calibration(bool ok)
 {
     std::lock_guard<std::mutex> lock(_health_mutex);
     _health.gyrometer_calibration_ok = ok;
 }
 
-void TelemetryImpl::set_health_accelerometer_calibration(bool ok)
+void APMTelemetryImpl::set_health_accelerometer_calibration(bool ok)
 {
     std::lock_guard<std::mutex> lock(_health_mutex);
     _health.accelerometer_calibration_ok = ok;
 }
 
-void TelemetryImpl::set_health_magnetometer_calibration(bool ok)
+void APMTelemetryImpl::set_health_magnetometer_calibration(bool ok)
 {
     std::lock_guard<std::mutex> lock(_health_mutex);
     _health.magnetometer_calibration_ok = ok;
 }
 
-void TelemetryImpl::set_health_level_calibration(bool ok)
+void APMTelemetryImpl::set_health_level_calibration(bool ok)
 {
     std::lock_guard<std::mutex> lock(_health_mutex);
     _health.level_calibration_ok = ok;
 }
 
-void TelemetryImpl::set_rc_status(bool available, float signal_strength_percent)
+void APMTelemetryImpl::set_rc_status(bool available, float signal_strength_percent)
 {
     std::lock_guard<std::mutex> lock(_rc_status_mutex);
 
@@ -788,80 +774,80 @@ void TelemetryImpl::set_rc_status(bool available, float signal_strength_percent)
 
 }
 
-void TelemetryImpl::position_async(Telemetry::position_callback_t &callback)
+void APMTelemetryImpl::position_async(Telemetry::position_callback_t &callback)
 {
     _position_subscription = callback;
 }
 
-void TelemetryImpl::home_position_async(Telemetry::position_callback_t &callback)
+void APMTelemetryImpl::home_position_async(Telemetry::position_callback_t &callback)
 {
     _home_position_subscription = callback;
 }
 
-void TelemetryImpl::in_air_async(Telemetry::in_air_callback_t &callback)
+void APMTelemetryImpl::in_air_async(Telemetry::in_air_callback_t &callback)
 {
     _in_air_subscription = callback;
 }
 
-void TelemetryImpl::armed_async(Telemetry::armed_callback_t &callback)
+void APMTelemetryImpl::armed_async(Telemetry::armed_callback_t &callback)
 {
     _armed_subscription = callback;
 }
 
-void TelemetryImpl::attitude_quaternion_async(Telemetry::attitude_quaternion_callback_t &callback)
+void APMTelemetryImpl::attitude_quaternion_async(Telemetry::attitude_quaternion_callback_t &callback)
 {
     _attitude_quaternion_subscription = callback;
 }
 
-void TelemetryImpl::attitude_euler_angle_async(Telemetry::attitude_euler_angle_callback_t
+void APMTelemetryImpl::attitude_euler_angle_async(Telemetry::attitude_euler_angle_callback_t
                                                &callback)
 {
     _attitude_euler_angle_subscription = callback;
 }
 
-void TelemetryImpl::camera_attitude_quaternion_async(Telemetry::attitude_quaternion_callback_t
+void APMTelemetryImpl::camera_attitude_quaternion_async(Telemetry::attitude_quaternion_callback_t
                                                      &callback)
 {
     _camera_attitude_quaternion_subscription = callback;
 }
 
-void TelemetryImpl::camera_attitude_euler_angle_async(Telemetry::attitude_euler_angle_callback_t
+void APMTelemetryImpl::camera_attitude_euler_angle_async(Telemetry::attitude_euler_angle_callback_t
                                                       &callback)
 {
     _camera_attitude_euler_angle_subscription = callback;
 }
 
-void TelemetryImpl::ground_speed_ned_async(Telemetry::ground_speed_ned_callback_t &callback)
+void APMTelemetryImpl::ground_speed_ned_async(Telemetry::ground_speed_ned_callback_t &callback)
 {
     _ground_speed_ned_subscription = callback;
 }
 
-void TelemetryImpl::gps_info_async(Telemetry::gps_info_callback_t &callback)
+void APMTelemetryImpl::gps_info_async(Telemetry::gps_info_callback_t &callback)
 {
     _gps_info_subscription = callback;
 }
 
-void TelemetryImpl::battery_async(Telemetry::battery_callback_t &callback)
+void APMTelemetryImpl::battery_async(Telemetry::battery_callback_t &callback)
 {
     _battery_subscription = callback;
 }
 
-void TelemetryImpl::flight_mode_async(Telemetry::flight_mode_callback_t &callback)
+void APMTelemetryImpl::flight_mode_async(Telemetry::flight_mode_callback_t &callback)
 {
     _flight_mode_subscription = callback;
 }
 
-void TelemetryImpl::health_async(Telemetry::health_callback_t &callback)
+void APMTelemetryImpl::health_async(Telemetry::health_callback_t &callback)
 {
     _health_subscription = callback;
 }
 
-void TelemetryImpl::health_all_ok_async(Telemetry::health_all_ok_callback_t &callback)
+void APMTelemetryImpl::health_all_ok_async(Telemetry::health_all_ok_callback_t &callback)
 {
     _health_all_ok_subscription = callback;
 }
 
-void TelemetryImpl::rc_status_async(Telemetry::rc_status_callback_t &callback)
+void APMTelemetryImpl::rc_status_async(Telemetry::rc_status_callback_t &callback)
 {
     _rc_status_subscription = callback;
 }

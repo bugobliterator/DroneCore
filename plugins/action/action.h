@@ -5,7 +5,7 @@
 namespace dronecore {
 
 class ActionImpl;
-
+class DeviceImpl;
 /**
  * @brief The Action class enables simple actions for a drone
  * such as arming, taking off, and landing.
@@ -18,7 +18,7 @@ public:
      *
      * @param impl Private internal implementation.
      */
-    explicit Action(ActionImpl *impl);
+    explicit Action(DeviceImpl *impl);
 
     /**
      * @brief Destructor (internal use only).
@@ -218,9 +218,11 @@ public:
      */
     const Action &operator=(const Action &) = delete;
 
+    ActionImpl* get_impl() { return _impl; }
 private:
     /** @private Underlying implementation, set at instantiation */
     ActionImpl *_impl;
+    DeviceImpl *_device;
 };
 
 } // namespace dronecore

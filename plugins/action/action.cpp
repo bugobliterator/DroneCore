@@ -1,15 +1,31 @@
 #include "action.h"
 #include "action_impl.h"
+#include "action_px4.h"
+#include "action_apm.h"
 
 namespace dronecore {
 
-Action::Action(ActionImpl *impl) :
-    _impl(impl)
+Action::Action(DeviceImpl *device) :
+    _device(device)
 {
+    switch(device->get_device_type()) {
+        case MAV_AUTOPILOT_PX4:
+            _impl = new PX4ActionImpl();
+            break;
+        case MAV_AUTOPILOT_ARDUPILOTMEGA:
+            _impl = new APMActionImpl();
+            break;
+        case MAV_AUTOPILOT_GENERIC:
+            _impl = new PX4ActionImpl();
+            break;
+    }
 }
 
 Action::~Action()
 {
+    if(_impl != nullptr) {
+        delete _impl;
+    }
 }
 
 Action::Result Action::arm() const

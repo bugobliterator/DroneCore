@@ -5,7 +5,8 @@ set(class_name
 
 set(source_files
     action.cpp
-    action_impl.cpp
+    action_px4.cpp
+    action_apm.cpp
     PARENT_SCOPE
 )
 
@@ -16,6 +17,7 @@ set(header_files
 
 set(impl_header_files
     action_impl.h
+    action_px4.h
     PARENT_SCOPE
 )
 
